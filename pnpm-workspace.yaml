@@ -1,0 +1,8 @@
+allowBuilds:
+  '@swc/core': set this to true or false
+  esbuild: set this to true or false
+  protobufjs: set this to true or false
+  yarn: set this to true or false
+overrides:
+  cheerio: 1.0.0
+  html-entities: 2.5.2

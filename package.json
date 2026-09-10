@@ -1,0 +1,40 @@
+{
+  "name": "hardcover-hub-sources",
+  "version": "1.0.0",
+  "private": true,
+  "repositoryName": "Hardcover Hub Sources",
+  "description": "Atsu, MangaBuddy and MangaKatana sources for Hardcover. Community maintained and experimental.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build:testing": "pnpm run test:experimental && node scripts/build-testing.mjs && node scripts/verify-testing-bundle.mjs",
+    "test:experimental": "tsc -p experimental/tsconfig.json && node scripts/verify-experimental.mjs",
+    "prebundle": "mkdir -p bundles",
+    "bundle": "paperback bundle --folder=0.8 && node scripts/customize-homepage.mjs",
+    "serve": "paperback serve",
+    "pretest": "pnpm run typecheck",
+    "test": "pnpm run bundle",
+    "posttest": "pnpm run verify",
+    "verify": "node scripts/verify-hosting.mjs && node scripts/verify-added.mjs && pnpm run test:experimental",
+    "typecheck": "tsc --noEmit --noUnusedLocals false"
+  },
+  "author": "Hardcover contributors; source implementations by Netsky",
+  "license": "GPL-3.0-or-later",
+  "packageManager": "pnpm@11.9.0",
+  "devDependencies": {
+    "@tsconfig/recommended": "^1.0.7",
+    "@types/node": "16.18.126",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0",
+    "eslint": "^7.32.0",
+    "eslint-plugin-modules-newline": "^0.0.6",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "@paperback/toolchain": "^0.8.7",
+    "@paperback/types": "^0.8.7",
+    "cheerio": "1.0.0",
+    "html-entities": "2.5.2"
+  }
+}
