@@ -1,6 +1,6 @@
 # Hardcover Hub Sources
 
-Dedicated GitHub Pages repository with a homepage layout adapted from [BigMan’s extensions](https://github.com/big-man25/hardcover-extensions) and an Add to Hardcover button. Atsu is imported from that repository; its other source adapters are not included.
+Hardcover Hub’s community source catalog, with a pink homepage and an Add to Hardcover button.
 
 Includes Atsu plus the two newly created **experimental** Hardcover 0.8 sources: MangaBuddy and MangaKatana. Toonily and MangaHub have a separate opt-in test catalog generated at `testing/0.8/`; they are not included in the main catalog. See [their status and test instructions](experimental/README.md).
 This package is ready for hosting setup, not a claim of on-device certification.
@@ -65,7 +65,7 @@ deployment and does not need a personal access token or a `gh-pages` branch.
 - Site changes, new CDN hosts, or anti-bot challenges may require updates.
 - These are mature third-party catalogs, not child-safe sources. MangaBuddy
   excludes marked adult/blurred cards; this is not a comprehensive content audit.
-- Toonily and MangaHub drafts are tested separately and excluded from published bundles. No family-mode or unrestricted-content variant is published.
+- Toonily and MangaHub are tested separately and published only in the opt-in test catalog. No family-mode or unrestricted-content variant is published.
 
 Use only material you are authorized to access. Site logos and content remain
 their owners' property. Preserve `LICENSE` and `THIRD_PARTY_NOTICES.md` when
