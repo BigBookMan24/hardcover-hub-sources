@@ -5,7 +5,7 @@ import { SourceTransport } from '../SourceTransport'
 const DOMAIN = 'https://toonily.com'
 const MEDIA = ['https://static.tnlycdn.com/', 'https://data.tnlycdn.com/']
 export const ToonilyInfo: SourceInfo = {
-    name: 'Toonily', version: '0.1.1', author: 'Hardcover Hub contributors', icon: 'icon.png',
+    name: 'Toonily', version: '0.1.2', author: 'Hardcover Hub contributors', icon: 'icon.png',
     description: 'Fresh public-HTML reader for the current Toonily site. Browser verification may be required.',
     websiteBaseURL: DOMAIN, contentRating: ContentRating.MATURE,
     intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS | SourceIntents.CLOUDFLARE_BYPASS_REQUIRED
@@ -17,6 +17,51 @@ export class Toonily extends SourceTransport {
     readonly prefix = '/serie/'
     readonly label = 'Toonily'
     browseURL(title: string): string { return title ? `${DOMAIN}/search/${encodeURIComponent(title)}` : DOMAIN + '/' }
+    async getSearchTags() {
+        const $ = load(await this.fetch(DOMAIN + '/search/beginning'))
+        const group = (id: string, label: string, field: string, prefix: string) => {
+            const tags: ReturnType<typeof App.createTag>[] = []
+            $(`.search-advanced-form input[name="${field}"]`).each((_, el) => {
+                const value = $(el).attr('value') ?? ''
+                const label = $(el).closest('label').text().trim()
+                if (value && label) tags.push(App.createTag({ id: prefix + ':' + value, label }))
+            })
+            return App.createTagSection({ id, label, tags })
+        }
+        const genres = group('genres', 'Genres', 'genre[]', 'genre')
+        if (!genres.tags.length) throw new Error('Toonily: search filters unavailable. Open the source website and retry.')
+        return [genres,
+            group('status', 'Status', 'status[]', 'status'),
+            group('content:single', 'Content', 'adult', 'adult'),
+            App.createTagSection({ id: 'match:single', label: 'Genre matching', tags: [
+                App.createTag({ id: 'op:0', label: 'Match any genre' }),
+                App.createTag({ id: 'op:1', label: 'Match all genres' })
+            ] }),
+            App.createTagSection({ id: 'sort:single', label: 'Sort', tags: [
+                ['', 'Relevance'], ['latest', 'Latest'], ['alphabet', 'A–Z'], ['rating', 'Rating'],
+                ['trending', 'Trending'], ['views', 'Most Views'], ['new-manga', 'New']
+            ].map(([id, label]) => App.createTag({ id: 'sort:' + id, label: label! })) }),
+            // Text fields use the same tag transport; Hardcover supplies their typed values.
+            App.createTagSection({ id: 'author:text', label: 'Writer', tags: [App.createTag({ id: 'author:', label: 'Writer name' })] }),
+            App.createTagSection({ id: 'artist:text', label: 'Artist', tags: [App.createTag({ id: 'artist:', label: 'Artist name' })] })
+        ]
+    }
+    private searchURL(query: SearchRequest): string {
+        const title = query.title?.trim() ?? ''
+        const tags = [...new Set((query.includedTags ?? []).map(tag => tag.id))].sort()
+        if (!tags.length) return this.browseURL(title)
+        const parameters: [string, string][] = [['post_type', 'wp-manga'], ['s', title]]
+        for (const tag of tags) {
+            const split = tag.indexOf(':'), key = tag.slice(0, split), value = tag.slice(split + 1)
+            if (split < 0 || value.length > 200) continue
+            if (key === 'genre' && /^[a-z0-9-]+$/.test(value)) parameters.push(['genre[]', value])
+            if (key === 'status' && ['on-going', 'end', 'canceled', 'on-hold'].includes(value)) parameters.push(['status[]', value])
+            if (key === 'sort' && ['', 'latest', 'alphabet', 'rating', 'trending', 'views', 'new-manga'].includes(value)) parameters.push(['m_orderby', value])
+            if (['adult', 'op'].includes(key) && ['0', '1'].includes(value)) parameters.push([key, value])
+            if (['author', 'artist'].includes(key) && value.trim()) parameters.push([key, value.trim()])
+        }
+        return DOMAIN + '/?' + parameters.map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&')
+    }
     private media(value: string): string {
         const url = value.trim()
         if (!MEDIA.some(prefix => url.startsWith(prefix)) || /[\\\s]/.test(url)) throw new Error('Toonily: unrecognized image host or path.')
@@ -39,14 +84,14 @@ export class Toonily extends SourceTransport {
         return results
     }
     override async getSearchResults(query: SearchRequest, metadata: any): Promise<PagedResults> {
-        const title = query.title?.trim() ?? ''
-        const url = metadata?.query === title && typeof metadata.next === 'string' ? this.absolute(metadata.next) : this.browseURL(title)
+        const queryKey = this.searchURL(query)
+        const url = metadata?.query === queryKey && typeof metadata.next === 'string' ? this.absolute(metadata.next) : queryKey
         const $ = load(await this.fetch(url)), results = this.cards($)
         if (!results.length && !$('.no-results, .search-no-results').length && !/\b0\s+RESULTS\b|nothing found|no (?:manga|manhwa|results) found/i.test($('body').text())) {
             throw new Error('Toonily: catalog unavailable. Check the source status in Settings.')
         }
         const next = $('a[rel="next"], a.nextpostslink, a.next.page-numbers').first().attr('href')
-        return App.createPagedResults({ results, metadata: next && next !== url ? { query: title, next: this.absolute(next) } : undefined })
+        return App.createPagedResults({ results, metadata: next && next !== url ? { query: queryKey, next: this.absolute(next) } : undefined })
     }
     override getMangaShareUrl(id: string): string { return `${DOMAIN}/serie/${this.id(id)}/` }
     override async getMangaDetails(id: string): Promise<SourceManga> {
@@ -61,12 +106,15 @@ export class Toonily extends SourceTransport {
         }
         const cover = $('.summary_image img').first()
         const genres = $('.genres-content a').toArray().map(el => ({ id: $(el).text().trim().toLowerCase(), label: $(el).text().trim() }))
-        return App.createSourceManga({ id, mangaInfo: App.createMangaInfo({
+        const result = App.createSourceManga({ id, mangaInfo: App.createMangaInfo({
             titles: [title], image: this.media(cover.attr('data-src') || cover.attr('src') || ''),
             desc: $('.summary__content').first().text().trim(),
             author: field(/writer|author/i), artist: field(/artist/i), status: field(/^status$/i) || 'Unknown',
             ...(genres.length ? { tags: [App.createTagSection({ id: 'genres', label: 'Genres', tags: genres.map(tag => App.createTag(tag)) })] } : {})
         }) })
+        // Mirror the site's actual per-title Family/R classification, not the extension rating.
+        ;(result.mangaInfo as any).hardcoverRequiresRMode = $('body').hasClass('adult-content')
+        return result
     }
     async getChapters(id: string): Promise<Chapter[]> {
         const base = this.getMangaShareUrl(id), $ = await this.detail(id)
