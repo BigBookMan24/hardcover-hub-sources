@@ -5,9 +5,9 @@ import { SourceTransport } from '../SourceTransport'
 const DOMAIN = 'https://toonily.com'
 const MEDIA = ['https://static.tnlycdn.com/', 'https://data.tnlycdn.com/']
 export const ToonilyInfo: SourceInfo = {
-    name: 'Toonily', version: '0.1.0', author: 'Hardcover Hub contributors', icon: 'icon.png',
+    name: 'Toonily', version: '0.1.1', author: 'Hardcover Hub contributors', icon: 'icon.png',
     description: 'Fresh public-HTML reader for the current Toonily site. Browser verification may be required.',
-    websiteBaseURL: DOMAIN, contentRating: ContentRating.ADULT,
+    websiteBaseURL: DOMAIN, contentRating: ContentRating.MATURE,
     intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS | SourceIntents.CLOUDFLARE_BYPASS_REQUIRED
 }
 

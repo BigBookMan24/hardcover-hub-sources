@@ -13,7 +13,7 @@ GitHub Actions deploys `bundles/testing/0.8/` alongside the main catalog on a pu
 
 ## Implementations
 
-- **Toonily:** fresh implementation based on the current public site, replacing the old draft. Uses `/search/{query}`, query-scoped next-page links, current metadata fields, embedded full chapter lists and the reader's lazy/eager image URLs. Preserves fractional chapters and image order. Rated ADULT; no content/age preference cookies are injected.
+- **Toonily:** fresh implementation based on the current public site, replacing the old draft. Uses `/search/{query}`, query-scoped next-page links, current metadata fields, embedded full chapter lists and the reader's lazy/eager image URLs. Preserves fractional chapters and image order. Rated MATURE at the repository owner’s request; no content/age preference cookies are injected.
 - **MangaHub:** HTML search, title metadata and complete chapter tabs, with the site's normal encrypted GraphQL chapter manifests for reading. The server HTML contains only preview pages and is never used as a full chapter. Uses displayed chapter numbers instead of occasional database IDs in links, preserving existing numeric chapter IDs. Site-issued session keys stay in memory; AES-GCM verifies authentication tags. A changed website session invalidates its chapter key, and an expired key gets the same single refresh as the site's reader. Rate limits and verification challenges are not retried.
 - **Kagane:** new English v2 API adapter. Requests Safe/Suggestive search results, respects API pagination, handles title metadata and chapter ordering, obtains a normal site-issued reader session, and returns ordered signed image URLs from known Kagane image servers. Session tokens are kept in memory, not shipped with the source. No browser-script execution or challenge solving is added.
 
@@ -48,3 +48,5 @@ Kagane API schema reference: `keiyoushi/extensions-source`, `src/all/kagane/src/
 Historical icon references:
 - Toonily: `TheNetsky/extensions-generic-0.8`, branch `madara`, commit `98316b3cf5ba22df791151b20ee4fd10c4c66ef2`.
 - MangaHub: `Nicartjay/PaperbackExt`, branch `0.9/stable`, commit `e24b697b75142bf5b93c6e50927d30ca0c4864fd`.
+
+October 6 follow-up (0.1.1): serialize source requests, respect Retry-After cooldowns, and slow MangaHub’s request schedule to prevent request bursts. Toonily’s catalog rating is Mature. Kagane still requires successful in-app verification before reading can be confirmed.

@@ -7,7 +7,7 @@ const root = 'bundles/testing/0.8'
 const manifest = JSON.parse(await readFile(`${root}/versioning.json`, 'utf8'))
 assert.deepEqual(manifest.sources.map(s => s.id).sort(), ['Kagane', 'MangaHub', 'Toonily'])
 for (const source of manifest.sources) {
-    assert.equal(source.contentRating, source.id === 'Toonily' ? 'ADULT' : 'MATURE')
+    assert.equal(source.contentRating, 'MATURE')
     assert(source.intents & 16, 'Missing browser verification capability')
     await access(`${root}/${source.id}/includes/icon.png`)
     const exports = require(`../${root}/${source.id}/source.js`).Sources

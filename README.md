@@ -78,7 +78,7 @@ deployment and does not need a personal access token or a `gh-pages` branch.
 - Site changes, new CDN hosts, or anti-bot challenges may require updates.
 - These are mature third-party catalogs, not child-safe sources. MangaBuddy
   excludes marked adult/blurred cards; this is not a comprehensive content audit.
-- Toonily, MangaHub and Kagane are included in the main catalog and the compatible test catalog. Toonily is rated ADULT; MangaHub excludes explicitly adult catalog cards, and Kagane requests English Safe/Suggestive results. App content settings are not changed.
+- Toonily, MangaHub and Kagane are included in the main catalog and the compatible test catalog. Toonily is rated MATURE; MangaHub excludes explicitly adult catalog cards, and Kagane requests English Safe/Suggestive results. App content settings are not changed.
 - October 2026 source update: Toonily was rebuilt from current public markup; MangaHub uses HTML catalog pages plus the website’s current encrypted chapter manifest protocol; Kagane uses its v2 catalog and normal site-issued reader sessions. See the [validation notes](experimental/README.md) before testing.
 
 Use only material you are authorized to access. Site logos and content remain
@@ -86,3 +86,5 @@ their owners' property. Preserve `LICENSE` and `THIRD_PARTY_NOTICES.md` when
 redistributing this code. This repository is not affiliated with the source sites.
 
 GitHub setup reference: https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
+
+October 6 follow-up (0.1.1): serialize source requests, respect Retry-After cooldowns, and slow MangaHub’s request schedule to prevent request bursts. Toonily’s catalog rating is Mature. Kagane still requires successful in-app verification before reading can be confirmed.

@@ -4,6 +4,7 @@ import { HtmlReader } from './HtmlReader'
 /** Normal HTTPS requests with bounded caching; verification is completed in the app browser. */
 export abstract class SourceTransport extends HtmlReader {
     private blockedUntil = 0
+    private requestQueue: Promise<void> = Promise.resolve()
     private responses = new Map<string, { body: string; expires: number }>()
     private pending = new Map<string, Promise<string>>()
 
@@ -11,7 +12,7 @@ export abstract class SourceTransport extends HtmlReader {
     protected allowedRequest(url: string): boolean { return url.startsWith(this.domain + '/') }
     protected async request(url: string, method = 'GET', data?: string, headers: Record<string, string> = {}, cache = true): Promise<string> {
         if (!this.allowedRequest(url)) throw new Error('Unexpected request host.')
-        if (Date.now() < this.blockedUntil) throw new Error(`${this.label}: rate limited. Wait a minute before retrying.`)
+        if (Date.now() < this.blockedUntil) throw this.rateLimitError()
         const key = method + ' ' + url
         if (method === 'GET' && cache) {
             const cached = this.responses.get(key)
@@ -19,15 +20,20 @@ export abstract class SourceTransport extends HtmlReader {
             const pending = this.pending.get(key)
             if (pending) return pending
         }
-        const operation = (async () => {
+        const operation = this.requestQueue.then(async () => {
+            // Recheck after waiting: an earlier queued request may have received HTTP 429.
+            if (Date.now() < this.blockedUntil) throw this.rateLimitError()
             const response = await this.requestManager.schedule(App.createRequest({ url, method, data, headers: {
                 referer: this.domain + '/', 'user-agent': await this.requestManager.getDefaultUserAgent(), ...headers
             } }), 1)
             this.observeResponse(response, url)
             const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '')
             if (response.status === 429) {
-                this.blockedUntil = Date.now() + 60000
-                throw new Error(`${this.label}: HTTP 429. Wait a minute before retrying.`)
+                const retryAfter = Object.entries(response.headers ?? {}).find(([name]) => name.toLowerCase() === 'retry-after')?.[1]
+                const value = String(Array.isArray(retryAfter) ? retryAfter[0] : retryAfter ?? '')
+                const seconds = /^\d+$/.test(value) ? Number(value) : (Date.parse(value) - Date.now()) / 1000
+                this.blockedUntil = Date.now() + Math.max(60000, Number.isFinite(seconds) ? seconds * 1000 : 0)
+                throw this.rateLimitError()
             }
             if (response.status === 403 || /<title[^>]*>\s*Just a moment|cf-chl-|challenge-platform\/h\//i.test(body)) {
                 throw new Error(`${this.label}: browser verification required. Open the source in the app browser, verify access, then retry.`)
@@ -38,9 +44,13 @@ export abstract class SourceTransport extends HtmlReader {
                 this.responses.set(key, { body, expires: Date.now() + 30000 })
             }
             return body
-        })()
+        })
+        this.requestQueue = operation.then(() => undefined, () => undefined)
         if (method === 'GET' && cache) this.pending.set(key, operation)
         try { return await operation } finally { this.pending.delete(key) }
+    }
+    private rateLimitError(): Error {
+        return new Error(`${this.label}: HTTP 429. Wait ${Math.max(1, Math.ceil((this.blockedUntil - Date.now()) / 1000))} seconds before retrying.`)
     }
     protected override async fetch(url: string): Promise<string> { return this.request(url) }
     async getCloudflareBypassRequestAsync() {

@@ -133,7 +133,7 @@ for (const Class of [Toonily, MangaHub, Kagane]) {
     const blocked = new Class(); let calls = 0
     blocked.requestManager.schedule = async () => { calls++; return { status: 429, data: '' } }
     await assert.rejects(blocked.getSearchResults({ title: 'example' }), /429/)
-    await assert.rejects(blocked.getSearchResults({ title: 'different' }), /Wait a minute/)
+    await assert.rejects(blocked.getSearchResults({ title: 'different' }), /Wait \d+ seconds/)
     assert.equal(calls, 1)
     const challenged = new Class()
     challenged.requestManager.schedule = async () => ({ status: 403, data: '<title>Just a moment...</title>' })
@@ -143,6 +143,21 @@ for (const Class of [Toonily, MangaHub, Kagane]) {
     malformed.requestManager.schedule = async () => response('<html>Unexpected content</html>')
     await assert.rejects(malformed.getMangaDetails('example'), /unavailable/)
 }
+// Queued operations must not escape the cooldown after an earlier request is rejected.
+const queued = new Toonily(); let queuedCalls = 0
+queued.requestManager.schedule = async () => { queuedCalls++; return { status: 429, headers: { 'Retry-After': '120' }, data: '' } }
+const queuedResults = await Promise.allSettled(['one', 'two', 'three'].map(title => queued.getSearchResults({ title })))
+assert.equal(queuedCalls, 1)
+assert(queuedResults.every(result => result.status === 'rejected' && /Wait 120 seconds/.test(result.reason.message)))
+const serialized = new Toonily(); let active = 0, maxActive = 0
+serialized.requestManager.schedule = async () => {
+    active++; maxActive = Math.max(maxActive, active)
+    await new Promise(resolve => setTimeout(resolve, 5)); active--
+    return response(toonTitle)
+}
+await Promise.all(['one', 'two', 'three'].map(id => serialized.getMangaDetails(id)))
+assert.equal(maxActive, 1, 'Different requests must not reach the native scheduler together')
+
 // Concurrent title/chapter loading shares one request. Failures remain retryable.
 const concurrent = new Toonily(); let calls = 0
 concurrent.requestManager.schedule = async () => { calls++; await new Promise(resolve => setTimeout(resolve, 5)); return response(toonTitle) }

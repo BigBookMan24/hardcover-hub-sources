@@ -8,7 +8,7 @@ const directories = (await readdir(root, { withFileTypes: true })).filter(e => e
 assert.deepEqual(directories, expected, 'Unexpected source bundles must not be published')
 assert.equal(manifest.builtWith.types, '0.8.7')
 for (const source of manifest.sources) {
-    assert(source.id === 'Toonily' ? source.contentRating === 'ADULT' : ['MATURE', 'EVERYONE'].includes(source.contentRating))
+    assert(['MATURE', 'EVERYONE'].includes(source.contentRating))
     await access(`${root}/${source.id}/source.js`)
     await access(`${root}/${source.id}/includes/${source.icon}`)
 }

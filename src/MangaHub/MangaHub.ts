@@ -8,7 +8,7 @@ const DOMAIN = 'https://mangahub.io'
 const THUMB = 'https://thumb.mghcdn.com/'
 const IMAGE = 'https://imgx.mghcdn.com/'
 export const MangaHubInfo: SourceInfo = {
-    name: 'MangaHub', version: '0.1.0', author: 'Hardcover Hub contributors', icon: 'icon.png',
+    name: 'MangaHub', version: '0.1.1', author: 'Hardcover Hub contributors', icon: 'icon.png',
     description: 'MangaHub reader with support for complete encrypted chapter manifests. Browser verification may be required.',
     websiteBaseURL: DOMAIN, contentRating: ContentRating.MATURE,
     intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS | SourceIntents.CLOUDFLARE_BYPASS_REQUIRED
@@ -18,6 +18,8 @@ export class MangaHub extends SourceTransport {
     readonly domain = DOMAIN
     readonly prefix = '/manga/'
     readonly label = 'MangaHub'
+    // A slower schedule reduces chapter/session bursts on hosts with eager preloading.
+    override requestManager = App.createRequestManager({ requestsPerSecond: 0.5, requestTimeout: 20000 })
     private issuedSession?: { value: string; expires: number }
     private chapterSessionAccess?: string
     private chapterSession?: { keyId: string; key: string; expiresAt: number }
@@ -141,7 +143,7 @@ export class MangaHub extends SourceTransport {
     }
     async getChapterDetails(id: string, chapter: string): Promise<ChapterDetails> {
         if (!/^\d+(?:\.\d+)?$/.test(chapter)) throw new Error('Invalid chapter number.')
-        if (Date.now() < this.apiBlockedUntil) throw new Error('MangaHub: rate limited. Wait a minute before retrying.')
+        if (Date.now() < this.apiBlockedUntil) throw new Error(`MangaHub: rate limited. Wait ${Math.ceil((this.apiBlockedUntil - Date.now()) / 1000)} seconds before retrying.`)
         // Match the site's single key refresh when a reader session expires. Never retry rate limits or verification failures.
         for (let attempt = 0; attempt < 2; attempt++) {
             try {

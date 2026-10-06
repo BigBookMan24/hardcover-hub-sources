@@ -7,7 +7,7 @@ const API = DOMAIN + '/api/v2'
 // Literal origins also allow Hardcover to show the source's network permissions at install time.
 const MEDIA_ORIGINS = [DOMAIN, 'https://kstatic.to', 'https://yuzuki.kagane.to', 'https://akari.kagane.to']
 export const KaganeInfo: SourceInfo = {
-    name: 'Kagane', version: '0.1.0', author: 'Hardcover Hub contributors', icon: 'icon.png',
+    name: 'Kagane', version: '0.1.1', author: 'Hardcover Hub contributors', icon: 'icon.png',
     description: 'Experimental English Kagane source. Safe and Suggestive catalog; browser verification may be required. On-device reading still needs verification.',
     websiteBaseURL: DOMAIN, contentRating: ContentRating.MATURE,
     intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS | SourceIntents.CLOUDFLARE_BYPASS_REQUIRED
