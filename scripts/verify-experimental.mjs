@@ -38,6 +38,38 @@ assert.equal(toonRequests.filter(r => r.url === toon.getMangaShareUrl('example')
 assert.equal(toon.cards(load(toonCard.replaceAll('https://toonily.com', 'https://other.test'))).length, 0)
 assert.throws(() => toon.cards(load(toonCard.replace('static.tnlycdn.com', 'static.tnlycdn.com.evil.test'))), /image host/)
 
+// All search controls are passed to the site's form endpoint, including text fields.
+const filteredToon = new Toonily(), filterRequests = []
+const filterForm = '<form class="search-advanced-form"><label><input name="genre[]" value="action">Action</label><label><input name="status[]" value="end">Completed</label><label><input name="adult" value="0">Family Friendly</label><label><input name="adult" value="1">Mature Only</label></form>'
+filteredToon.requestManager.schedule = async req => {
+    filterRequests.push(req)
+    if (req.url.endsWith('/search/beginning')) return response(filterForm)
+    return response(toonCard + '<a rel="next" href="https://toonily.com/page/2/?genre%5B%5D=action">Next</a>')
+}
+const groups = await filteredToon.getSearchTags()
+assert.equal(groups.length, 7)
+assert.equal(groups.find(g => g.id === 'genres').tags[0].id, 'genre:action')
+assert.equal(groups.find(g => g.id === 'sort:single').tags.length, 7)
+const query = { title: 'test & title', includedTags: ['genre:action', 'genre:fantasy', 'status:end', 'adult:0', 'op:1', 'sort:rating', 'author:A & B', 'artist:An Artist'].map(id => ({id})) }
+const filteredPage = await filteredToon.getSearchResults(query)
+const submitted = new URL(filterRequests.at(-1).url).searchParams
+assert.deepEqual(submitted.getAll('genre[]'), ['action', 'fantasy'])
+assert.equal(submitted.get('status[]'), 'end')
+assert.equal(submitted.get('author'), 'A & B')
+assert.equal(submitted.get('artist'), 'An Artist')
+assert.equal(submitted.get('s'), 'test & title')
+assert.equal(submitted.get('m_orderby'), 'rating')
+assert.equal(submitted.get('adult'), '0')
+assert.equal(submitted.get('op'), '1')
+await filteredToon.getSearchResults(query, filteredPage.metadata)
+assert(filterRequests.at(-1).url.includes('/page/2/'))
+await filteredToon.getSearchResults({ ...query, includedTags: [{id:'genre:comedy'}] }, filteredPage.metadata)
+assert(!filterRequests.at(-1).url.includes('/page/2/'), 'Changed filters reset pagination')
+assert.equal((await toon.getMangaDetails('example')).mangaInfo.hardcoverRequiresRMode, false)
+const restrictedToon = new Toonily()
+restrictedToon.requestManager.schedule = async () => response('<body class="adult-content">' + toonTitle + '</body>')
+assert.equal((await restrictedToon.getMangaDetails('example')).mangaInfo.hardcoverRequiresRMode, true)
+
 const hubCard = '<div class="media-manga media"><div class="media-left"><img class="manga-thumb" src="https://thumb.mghcdn.com/cover.jpg"></div><h4 class="media-heading"><a href="https://mangahub.io/manga/example">Example</a></h4></div>'
 const hubTitle = '<div id="mangadetail"><h1>Example<a>Hot</a><small>Alternate; Example</small></h1><img class="manga-thumb" src="https://thumb.mghcdn.com/cover.jpg"><div><span>Author</span><span>Writer</span></div><div id="chapters-tab"><div class="tab-pane active"><li class="list-group-item"><a href="https://mangahub.io/chapter/example/chapter-2695288">#2.5 - Extra<small>yesterday</small></a><a href="https://mangahub.io/chapter/example/chapter-99999">Alternate</a></li></div><div class="tab-pane" aria-hidden="true"><li class="list-group-item"><a href="https://mangahub.io/chapter/example/chapter-1">#1</a></li></div><div id="chapters-tab-pane-999">Synopsis</div></div></div>'
 const hub = new MangaHub(), hubRequests = []
