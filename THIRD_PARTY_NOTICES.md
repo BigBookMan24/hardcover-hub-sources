@@ -1,14 +1,14 @@
 # Third-party notices
 
-Development-only Toonily and MangaHub adapters reference the projects and pinned
-commits documented in `experimental/README.md`. Their upstream license notices
-are retained in `experimental/licenses/`; Madara's package metadata declares
-GPL-3.0-or-later, and PaperbackExt carries the MIT notice. No third-party chapter
-content or live session tokens are bundled with these drafts.
+The October 2026 Toonily and MangaHub readers are fresh implementations based
+on public site markup and the normal site-issued MangaHub chapter session protocol. Kagane is independently implemented in TypeScript, with
+its API shapes checked against the upstream reference documented in
+`experimental/README.md`. No live session tokens or chapter images are bundled.
 
-Test-source icons in `experimental/icons/` are copied from the corresponding
-upstream extension folders listed in `experimental/README.md`. Site logo rights
-remain with their respective owners; the images are not covered by our code license.
+Toonily and MangaHub test-source icons retain their original upstream provenance
+and license notices in `experimental/licenses/`. Kagane's icon is its public
+`https://kagane.to/favicons/favicon-96x96.png`, retrieved on 2026-10-06. Site logo
+rights remain with their respective owners and are not covered by our code license.
 
 The repository scaffolding was adapted from BigMan’s extensions. The new
 MangaBuddy and MangaKatana adapters and the imported Atsu adapter are included.
@@ -44,3 +44,11 @@ catalog filters are preserved. This is a pinned copy, not an automatic upstream 
 retrieved through Apple's public lookup service. Copyright remains with Steas
 Software; it is not covered by this repository's code license. Used to identify
 the compatible app, without implying affiliation or endorsement.
+
+## MangaHub chapter decryption
+
+The MangaHub bundle includes `@noble/ciphers` 1.3.0 for authenticated AES-GCM
+decryption using the session key issued by the website to its own reader.
+Copyright (c) 2022 Paul Miller and (c) 2016 Thomas Pornin.
+The MIT license is preserved in `experimental/licenses/noble-ciphers-MIT.txt`.
+No keys are shipped with the source.

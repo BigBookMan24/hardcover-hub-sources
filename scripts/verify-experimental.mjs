@@ -1,103 +1,163 @@
 import assert from 'node:assert/strict'
+import { createCipheriv } from 'node:crypto'
 import { createRequire } from 'node:module'
+import { readFile } from 'node:fs/promises'
 const require = createRequire(import.meta.url)
-const identity = x => x
-globalThis.App = Object.fromEntries(['Chapter', 'ChapterDetails', 'HomeSection', 'MangaInfo', 'PagedResults', 'PartialSourceManga', 'Request', 'SourceManga'].map(n => ['create' + n, identity]))
-App.createRequestManager = () => ({
-    getDefaultUserAgent: async () => 'Hardcover test',
-    cookieStore: { getAllCookies: () => [{ name: 'mhub_access', domain: '.mangahub.io', value: 'fixture-session' }] },
-    schedule: async () => { throw Error('Unexpected network request') }
-})
-const { Toonily } = process.env.TEST_BUNDLES ? require('../bundles/testing/0.8/Toonily/source.js').Sources : require('../.experimental-build/experimental/Toonily.js')
-const { MangaHub } = process.env.TEST_BUNDLES ? require('../bundles/testing/0.8/MangaHub/source.js').Sources : require('../.experimental-build/experimental/MangaHub.js')
+const identity = value => value
+globalThis.App = Object.fromEntries(['Chapter', 'ChapterDetails', 'HomeSection', 'MangaInfo', 'PagedResults', 'PartialSourceManga', 'Request', 'SourceManga', 'Tag', 'TagSection'].map(name => ['create' + name, identity]))
+App.createRequestManager = () => ({ getDefaultUserAgent: async () => 'Hardcover test', schedule: async () => { throw Error('Unexpected request') } })
+const source = name => process.env.TEST_BUNDLES
+    ? require(`../bundles/${process.env.TEST_BUNDLES === 'main' ? '' : 'testing/'}0.8/${name}/source.js`).Sources[name]
+    : require(`../.experimental-build/experimental/${name}.js`)[name]
+const Toonily = source('Toonily'), MangaHub = source('MangaHub'), Kagane = source('Kagane')
 const { load } = require('cheerio')
-const toon = new Toonily()
-const card = '<div class="page-item-detail manga"><a href="https://toonily.com/serie/example/" title="Example"><img data-src="https://static.tnlycdn.com/cover.jpg"></a></div>'
-assert.equal(toon.cards(load(card + card)).length, 1)
-assert.equal(toon.cards(load(card.replace('https://toonily.com/', 'https://elsewhere.test/'))).length, 0)
-assert.throws(() => toon.getMangaShareUrl('../bad'))
-assert.equal((await toon.getCloudflareBypassRequestAsync()).url, 'https://toonily.com/')
+const response = data => ({ status: 200, data: typeof data === 'string' ? data : JSON.stringify(data) })
+
+// Structural fixtures follow public HTML inspected on 2026-10-06. No live chapter art/tokens are stored.
+const toonCard = '<div class="page-item-detail manga"><div class="item-thumb"><a href="https://toonily.com/serie/example/"><img src="https://static.tnlycdn.com/cover.jpg"></a></div><div class="post-title"><h3><a href="https://toonily.com/serie/example/">Example</a></h3></div></div>'
+const toonTitle = '<div class="post-title"><h1>Example <span class="manga-title-badges">TOP</span></h1></div><div class="summary_image"><img src="https://static.tnlycdn.com/cover.jpg"></div><div class="summary__content">A synopsis</div><div class="post-content_item"><div class="summary-heading">Writer(s)</div><div class="summary-content">An Author</div></div><div id="tab-chapter-listing"><li class="wp-manga-chapter"><a href="https://toonily.com/serie/example/chapter-2.5/">Chapter 2.5 — Extra</a></li><li class="wp-manga-chapter"><a href="https://toonily.com/serie/example/chapter-1/">Chapter 1</a></li></div>'
+const toon = new Toonily(), toonRequests = []
 toon.requestManager.schedule = async req => {
-    assert.equal(req.cookies, undefined, 'Do not force website preferences/age cookies')
-    if (req.url.endsWith('/ajax/chapters')) {
-        assert.equal(req.method, 'POST')
-        return { status: 200, data: '<li class="wp-manga-chapter"><a href="https://toonily.com/serie/example/chapter-2/">Chapter 2</a></li>' }
-    }
-    if (req.url.includes('chapter-2')) return { status: 200, data: '<div class="page-break"><img data-src="https://data.tnlycdn.com/1.jpg"></div><div class="page-break"><img src="https://data.tnlycdn.com/2.jpg"></div>' }
-    return { status: 200, data: '<div class="post-title"><h1>Example <span>NEW</span></h1></div><div class="summary_image"><img src="https://static.tnlycdn.com/cover.jpg"></div><div class="summary__content">Example synopsis</div>' }
+    toonRequests.push(req)
+    assert.equal(req.cookies, undefined, 'Do not inject content or age preference cookies')
+    if (req.url.includes('/search/')) return response(toonCard + toonCard + '<a rel="next" href="https://toonily.com/page/2/?s=example">Next</a>')
+    if (req.url.includes('/page/2/')) return response('<h1>0 RESULTS</h1>')
+    if (req.url.includes('/chapter-')) return response('<div class="reading-content"><div class="page-break"><img class="wp-manga-chapter-img" src="https://data.tnlycdn.com/1.jpg"></div><div class="page-break"><img class="wp-manga-chapter-img" data-src="https://data.tnlycdn.com/2.jpg" src="data:image/png;base64,placeholder"></div></div>')
+    return response(toonTitle)
 }
+const toonSearch = await toon.getSearchResults({ title: 'example' })
+assert.equal(toonSearch.results.length, 1)
+assert.equal((await toon.getSearchResults({ title: 'example' }, toonSearch.metadata)).metadata, undefined)
+await toon.getSearchResults({ title: 'different' }, toonSearch.metadata)
+assert.equal(toonRequests.at(-1).url, 'https://toonily.com/search/different', 'New queries reset pagination')
 assert.equal((await toon.getMangaDetails('example')).mangaInfo.titles[0], 'Example')
-assert.equal((await toon.getMangaDetails('example')).mangaInfo.desc, 'Example synopsis')
-assert.throws(() => toon.cards(load(card.replace('static.tnlycdn.com', 'unrecognized.test'))), /media host/)
-assert.equal((await toon.getChapters('example'))[0].chapNum, 2)
-assert.equal((await toon.getChapterDetails('example', 'chapter-2')).pages.length, 2)
-const inline = new Toonily()
-let inlineRequests = 0
-inline.requestManager.schedule = async req => {
-    inlineRequests++
-    assert.equal(req.method, 'GET')
-    return { status: 200, data: '<li class="wp-manga-chapter"><a href="https://toonily.com/serie/example/chapter-1/">Chapter 1</a></li>' }
-}
-assert.equal((await inline.getChapters('example')).length, 1)
-assert.equal(inlineRequests, 1)
-toon.requestManager.schedule = async () => ({ status: 200, data: '<div>Reader missing</div>' })
-await assert.rejects(toon.getChapterDetails('example', 'chapter-3'), /unavailable/)
-for (const status of [403, 503]) {
-    toon.requestManager.schedule = async () => ({ status, data: '' })
-    await assert.rejects(toon.getMangaDetails('example'), /browser verification/)
-}
-toon.requestManager.schedule = async () => ({ status: 200, data: '<title>Just a moment</title>' })
-await assert.rejects(toon.getMangaDetails('example'), /browser verification/)
-let requests = 0
-toon.requestManager.schedule = async () => { requests++; return { status: 429, data: '' } }
-await assert.rejects(toon.getChapters('example'), /HTTP 429/)
-await assert.rejects(toon.getChapters('example'), /Wait a minute/)
-assert.equal(requests, 1)
-const hub = new MangaHub()
+assert.equal((await toon.getMangaDetails('example')).mangaInfo.author, 'An Author')
+assert.deepEqual((await toon.getChapters('example')).map(c => c.chapNum), [2.5, 1])
+assert.deepEqual((await toon.getChapterDetails('example', 'chapter-2.5')).pages, ['https://data.tnlycdn.com/1.jpg', 'https://data.tnlycdn.com/2.jpg'])
+assert.equal(toonRequests.filter(r => r.url === toon.getMangaShareUrl('example')).length, 1, 'Reuse title HTML for details and chapters')
+assert.equal(toon.cards(load(toonCard.replaceAll('https://toonily.com', 'https://other.test'))).length, 0)
+assert.throws(() => toon.cards(load(toonCard.replace('static.tnlycdn.com', 'static.tnlycdn.com.evil.test'))), /image host/)
+
+const hubCard = '<div class="media-manga media"><div class="media-left"><img class="manga-thumb" src="https://thumb.mghcdn.com/cover.jpg"></div><h4 class="media-heading"><a href="https://mangahub.io/manga/example">Example</a></h4></div>'
+const hubTitle = '<div id="mangadetail"><h1>Example<a>Hot</a><small>Alternate; Example</small></h1><img class="manga-thumb" src="https://thumb.mghcdn.com/cover.jpg"><div><span>Author</span><span>Writer</span></div><div id="chapters-tab"><div class="tab-pane active"><li class="list-group-item"><a href="https://mangahub.io/chapter/example/chapter-2695288">#2.5 - Extra<small>yesterday</small></a><a href="https://mangahub.io/chapter/example/chapter-99999">Alternate</a></li></div><div class="tab-pane" aria-hidden="true"><li class="list-group-item"><a href="https://mangahub.io/chapter/example/chapter-1">#1</a></li></div><div id="chapters-tab-pane-999">Synopsis</div></div></div>'
+const hub = new MangaHub(), hubRequests = []
+const key = Buffer.alloc(32, 19), iv = Buffer.alloc(12, 7)
+const cipher = createCipheriv('aes-256-gcm', key, iv)
+const manifest = { p: 'example/', i: Array.from({ length: 51 }, (_, i) => `${i + 1}.webp?x=fixture`) }
+const ciphertext = Buffer.concat([cipher.update(JSON.stringify(manifest)), cipher.final()])
+const envelope = ['enc', 'v1', 'fixture-key', iv.toString('base64url'), cipher.getAuthTag().toString('base64url'), ciphertext.toString('base64url')].join(':')
+let hubEnvelope = envelope, hubAccess = 'fixture-access', expiredReplies = 0
 hub.requestManager.schedule = async req => {
-    assert.equal(req.url, 'https://api.mghcdn.com/graphql')
-    assert.equal(req.headers['x-mhub-access'], 'fixture-session')
-    const query = JSON.parse(req.data).query
-    const row = { slug: 'example', title: 'Example', image: 'cover.jpg', chapters: [{ number: 1 }, { number: 2.5 }] }
-    let data
-    if (query.includes('search(')) data = { search: { rows: Array(30).fill(row) } }
-    else if (query.includes('chapter(')) data = { chapter: { pages: JSON.stringify({ p: 'example/', i: ['1.jpg', '2.jpg'] }) } }
-    else data = { manga: row }
-    return { status: 200, data: JSON.stringify({ data }) }
+    hubRequests.push(req)
+    if (req.url === 'https://mangahub.io/') return { ...response('<html>Session</html>'), headers: { 'set-cookie': 'mhub_access=fixture-access; Path=/; Max-Age=300' } }
+    if (req.url.endsWith('/api/chapter-crypto')) return response({ keyId: 'fixture-key', key: key.toString('base64url'), expiresAt: Date.now() + 300000 })
+    if (req.url === 'https://api.mghcdn.com/graphql') {
+        assert.equal(req.headers['x-mhub-access'], hubAccess)
+        assert(JSON.parse(req.data).query.includes('number:2.5'), 'Use displayed chapter numbers, not database row IDs')
+        if (expiredReplies-- > 0) return response({ errors: [{ message: 'Chapter encryption unavailable' }] })
+        return response({ data: { chapter: { pages: hubEnvelope } } })
+    }
+    if (req.url.includes('/search')) return response('<input id="q">' + hubCard + '<ul class="pager"><li class="next"><a href="/search?page=2">Next →</a></li></ul>')
+    if (req.url.includes('/chapter/')) return response('<div id="mangareader"><img src="https://imgx.mghcdn.com/example/1.webp?x=fixture"><div class="hidden"><img src="https://imgx.mghcdn.com/example/2.webp?x=fixture"></div><img src="https://ad.test/banner.jpg"></div>')
+    if (req.url.endsWith('/manga/other')) {
+        hubAccess = 'fixture-access-2'
+        return { ...response(hubTitle), headers: { 'set-cookie': `mhub_access=${hubAccess}; Path=/; Max-Age=300` } }
+    }
+    return response(hubTitle)
 }
-const search = await hub.getSearchResults({ title: 'example' })
-assert.equal(search.results.length, 1)
-assert.deepEqual(search.metadata, { page: 2, query: 'example' })
-assert.equal((await hub.getMangaDetails('example')).mangaInfo.image, 'https://thumb.mghcdn.com/cover.jpg')
-assert.equal((await hub.getChapters('example'))[0].id, '2.5')
-assert.deepEqual((await hub.getChapterDetails('example', '2.5')).pages, ['https://imgx.mghcdn.com/example/1.jpg', 'https://imgx.mghcdn.com/example/2.jpg'])
-await assert.rejects(hub.getChapterDetails('example', '1){bad}'), /Invalid chapter/)
-hub.requestManager.schedule = async () => ({ status: 200, data: JSON.stringify({ data: { chapter: { pages: '{"p":"../","i":["x.jpg"]}' } } }) })
-await assert.rejects(hub.getChapterDetails('example', '1'), /Invalid page path/)
-hub.requestManager.schedule = async () => ({ status: 200, data: '{}' })
-await assert.rejects(hub.getMangaDetails('example'), /unavailable/)
-hub.requestManager.schedule = async () => ({ status: 200, data: '{broken' })
-await assert.rejects(hub.getMangaDetails('example'), /invalid JSON/)
-hub.requestManager.schedule = async () => ({ status: 200, data: '{"errors":[{"message":"rate limit"}]}' })
-await assert.rejects(hub.getMangaDetails('example'), /API rejected/)
-await assert.rejects(hub.getMangaDetails('example'), /Wait a minute/)
-const noSession = new MangaHub()
-noSession.requestManager.cookieStore.getAllCookies = () => []
-noSession.requestManager.schedule = async () => ({ status: 200, data: '<html>Public landing page</html>' })
-await assert.rejects(noSession.getMangaDetails('example'), /session unavailable/)
-const issued = new MangaHub()
-issued.requestManager.cookieStore = undefined
-let sessionRequests = 0
-issued.requestManager.schedule = async req => {
-    sessionRequests++
-    if (req.url === 'https://mangahub.io/') return { status: 200, data: '<html></html>', headers: { 'Set-Cookie': 'mhub_access=fresh-fixture; Domain=.mangahub.io; Max-Age=60; Secure' } }
-    assert.equal(req.headers['x-mhub-access'], 'fresh-fixture')
-    return { status: 200, data: '{"data":{"manga":{"title":"Example","image":"cover.jpg"}}}' }
+const hubSearch = await hub.getSearchResults({ title: 'an "example" & more' })
+assert.equal(hubSearch.results.length, 1)
+assert(hubRequests[0].url.includes('an%20%22example%22%20%26%20more'))
+assert.equal(hubSearch.metadata.next, 'https://mangahub.io/search?page=2')
+assert.equal(hub.cards(load(hubCard.replace('</h4>', '</h4><a href="/genre/pornographic">Adult</a>'))).length, 0)
+assert.deepEqual((await hub.getMangaDetails('example')).mangaInfo.titles, ['Example', 'Alternate'])
+assert.equal((await hub.getMangaDetails('example')).mangaInfo.author, 'Writer')
+assert.deepEqual((await hub.getChapters('example')).map(c => c.id), ['2.5', '1'], 'Hidden tabs included, alternate copies excluded; existing numeric IDs retained')
+assert.equal(hubRequests.filter(r => r.url.endsWith('/manga/example')).length, 1)
+assert.deepEqual((await hub.getChapterDetails('example', '2.5')).pages, manifest.i.map(file => 'https://imgx.mghcdn.com/example/' + file), 'Read all 51 pages, never the six-page HTML preview')
+await hub.getMangaDetails('other')
+await hub.getChapterDetails('example', '2.5')
+assert.equal(hubRequests.filter(req => req.url.endsWith('/api/chapter-crypto')).length, 2, 'A new website session must not reuse an old chapter key')
+expiredReplies = 1
+await hub.getChapterDetails('example', '2.5')
+assert.equal(hubRequests.filter(req => req.url.endsWith('/api/chapter-crypto')).length, 3, 'Refresh an expired chapter key once, like the website reader')
+expiredReplies = 2
+const beforeExpired = hubRequests.filter(req => req.url.endsWith('/graphql')).length
+await assert.rejects(hub.getChapterDetails('example', '2.5'), /after refresh/)
+assert.equal(hubRequests.filter(req => req.url.endsWith('/graphql')).length - beforeExpired, 2, 'Do not loop on session errors')
+hubEnvelope = envelope.slice(0, -5) + 'AAAAA'
+await assert.rejects(hub.getChapterDetails('example', '2.5'), /tag|auth|invalid/i, 'Reject modified ciphertext')
+hubEnvelope = envelope
+await assert.rejects(hub.getChapterDetails('example', '1/../../bad'), /Invalid chapter/)
+
+const kagane = new Kagane(), kaganeRequests = []
+const series = { title: 'Example', series_covers: [{ image_id: 'cover-id' }], upload_status: 'ONGOING', description: '<p>Synopsis</p>', series_staff: [{ name: 'Writer', role: 'Author' }], series_books: [{ book_id: 'book-1', sort_no: 1, chapter_no: '1', title: 'Chapter 1' }, { book_id: 'book-2', sort_no: 2, chapter_no: '1.5', title: 'Extra' }] }
+const reader = { access_token: 'fixture+/=', cache_url: 'https://yuzuki.kagane.to', manifest: { pages: [{ page_no: 2, page_id: 'page-2', ext: 'webp' }, { page_no: 1, page_id: 'page-1', ext: 'jpg' }] } }
+kagane.requestManager.schedule = async req => {
+    kaganeRequests.push(req)
+    if (req.url.includes('/search/series')) {
+        assert.equal(req.method, 'POST')
+        const body = JSON.parse(req.data)
+        assert.deepEqual(body.content_rating, ['Safe', 'Suggestive'])
+        assert.deepEqual(body.content_lang, ['en'])
+        return response({ content: [{ series_id: 'series-1', title: 'Example', cover_image_id: 'cover-id' }], last: false })
+    }
+    if (req.url.endsWith('/series/series-1')) return response(series)
+    if (req.url.endsWith('/api/integrity')) return response({ token: 'fixture-integrity', exp: Date.now() / 1000 + 60 })
+    if (req.url.includes('/books/')) {
+        assert.equal(req.method, 'POST')
+        assert.equal(req.headers['x-integrity-token'], 'fixture-integrity')
+        return response(reader)
+    }
+    assert.equal(req.url, 'https://kagane.to/')
+    return response('<html>Session</html>')
 }
-assert.equal((await issued.getMangaDetails('example')).mangaInfo.titles[0], 'Example')
-assert.equal(sessionRequests, 2)
-const expired = new MangaHub()
-expired.requestManager.cookieStore.getAllCookies = () => [{ name: 'mhub_access', domain: '.mangahub.io', value: 'expired', expires: new Date(0) }]
-expired.requestManager.schedule = async () => ({ status: 200, data: '<html></html>', headers: { 'set-cookie': 'mhub_access=expired; Max-Age=0' } })
-await assert.rejects(expired.getMangaDetails('example'), /session unavailable/)
-console.log('Experimental Toonily and MangaHub fixture tests passed. Live compatibility is NOT verified.')
+const kaganeSearch = await kagane.getSearchResults({ title: 'example' })
+assert.deepEqual(kaganeSearch.metadata, { query: 'example', page: 1 })
+await kagane.getSearchResults({ title: 'different' }, kaganeSearch.metadata)
+assert(kaganeRequests.at(-1).url.includes('page=0'))
+assert.equal((await kagane.getMangaDetails('series-1')).mangaInfo.author, 'Writer')
+assert.deepEqual((await kagane.getChapters('series-1')).map(c => c.chapNum), [1.5, 1])
+const pages = await kagane.getChapterDetails('series-1', 'book-1')
+assert.deepEqual(pages.pages, ['https://yuzuki.kagane.to/api/v2/books/page/book-1/page-1.jpg?token=fixture%2B%2F%3D', 'https://yuzuki.kagane.to/api/v2/books/page/book-1/page-2.webp?token=fixture%2B%2F%3D'])
+await kagane.getChapterDetails('series-1', 'book-2')
+assert.equal(kaganeRequests.filter(r => r.url.endsWith('/api/integrity')).length, 1)
+reader.cache_url = 'https://yuzuki.kagane.to.evil.test'
+await assert.rejects(kagane.getChapterDetails('series-1', 'book-1'), /image server changed/)
+reader.cache_url = 'https://yuzuki.kagane.to'
+reader.manifest.pages[1].page_no = 2
+await assert.rejects(kagane.getChapterDetails('series-1', 'book-1'), /invalid page order/)
+
+for (const Class of [Toonily, MangaHub, Kagane]) {
+    assert.throws(() => new Class().getMangaShareUrl('../invalid'))
+    const blocked = new Class(); let calls = 0
+    blocked.requestManager.schedule = async () => { calls++; return { status: 429, data: '' } }
+    await assert.rejects(blocked.getSearchResults({ title: 'example' }), /429/)
+    await assert.rejects(blocked.getSearchResults({ title: 'different' }), /Wait a minute/)
+    assert.equal(calls, 1)
+    const challenged = new Class()
+    challenged.requestManager.schedule = async () => ({ status: 403, data: '<title>Just a moment...</title>' })
+    await assert.rejects(challenged.getSearchResults({ title: 'example' }), /browser verification/)
+    assert.equal((await challenged.getCloudflareBypassRequestAsync()).url, challenged.domain + '/')
+    const malformed = new Class()
+    malformed.requestManager.schedule = async () => response('<html>Unexpected content</html>')
+    await assert.rejects(malformed.getMangaDetails('example'), /unavailable/)
+}
+// Concurrent title/chapter loading shares one request. Failures remain retryable.
+const concurrent = new Toonily(); let calls = 0
+concurrent.requestManager.schedule = async () => { calls++; await new Promise(resolve => setTimeout(resolve, 5)); return response(toonTitle) }
+await Promise.all([concurrent.getMangaDetails('example'), concurrent.getChapters('example')])
+assert.equal(calls, 1)
+const retry = new Toonily(); let attempts = 0
+retry.requestManager.schedule = async () => ++attempts === 1 ? { status: 503, data: '' } : response(toonTitle)
+await assert.rejects(retry.getMangaDetails('example'), /503/)
+assert.equal((await retry.getMangaDetails('example')).mangaInfo.titles[0], 'Example')
+
+if (process.argv.includes('--captured')) {
+    const live = new Toonily()
+    live.requestManager.schedule = async () => response(await readFile('/tmp/toon-live.html', 'utf8'))
+    assert.equal((await live.getMangaDetails('the-beginning-after-the-end-54f5cb7c')).mangaInfo.author, 'TurtleMe')
+    assert((await live.getChapters('the-beginning-after-the-end-54f5cb7c')).length > 250)
+    console.log('Captured Toonily HTTP response: title, author and 250+ chapter links parsed.')
+}
+console.log('MangaHub, fresh Toonily and Kagane parser/protocol/error tests passed. Live app verification is required separately.')

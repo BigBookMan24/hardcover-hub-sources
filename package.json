@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "repositoryName": "Hardcover Hub Sources",
-  "description": "Atsu, MangaBuddy and MangaKatana sources for Hardcover. Community maintained and experimental.",
+  "description": "Atsu, MangaBuddy, MangaKatana, MangaHub, Toonily and Kagane sources for Hardcover. Kagane requires browser verification and its app reader is not yet verified.",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -16,7 +16,7 @@
     "pretest": "pnpm run typecheck",
     "test": "pnpm run bundle",
     "posttest": "pnpm run verify",
-    "verify": "node scripts/verify-hosting.mjs && node scripts/verify-added.mjs && pnpm run test:experimental",
+    "verify": "node scripts/verify-hosting.mjs && node scripts/verify-added.mjs && pnpm run test:experimental && TEST_BUNDLES=main node scripts/verify-experimental.mjs",
     "typecheck": "tsc --noEmit --noUnusedLocals false"
   },
   "author": "Hardcover contributors; source implementations by Netsky",
@@ -32,6 +32,7 @@
     "typescript": "^4.9.5"
   },
   "dependencies": {
+    "@noble/ciphers": "1.3.0",
     "@paperback/toolchain": "^0.8.7",
     "@paperback/types": "^0.8.7",
     "cheerio": "1.0.0",

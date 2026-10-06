@@ -2,13 +2,13 @@ import assert from 'node:assert/strict'
 import { readFile, access, readdir } from 'node:fs/promises'
 const root = 'bundles/0.8'
 const manifest = JSON.parse(await readFile(`${root}/versioning.json`, 'utf8'))
-const expected = ['Atsu', 'MangaBuddy', 'MangaKatana']
+const expected = ['Atsu', 'Kagane', 'MangaBuddy', 'MangaHub', 'MangaKatana', 'Toonily']
 assert.deepEqual(manifest.sources.map(s => s.id).sort(), expected)
 const directories = (await readdir(root, { withFileTypes: true })).filter(e => e.isDirectory()).map(e => e.name).sort()
 assert.deepEqual(directories, expected, 'Unexpected source bundles must not be published')
 assert.equal(manifest.builtWith.types, '0.8.7')
 for (const source of manifest.sources) {
-    assert(['MATURE', 'EVERYONE'].includes(source.contentRating))
+    assert(source.id === 'Toonily' ? source.contentRating === 'ADULT' : ['MATURE', 'EVERYONE'].includes(source.contentRating))
     await access(`${root}/${source.id}/source.js`)
     await access(`${root}/${source.id}/includes/${source.icon}`)
 }
@@ -22,4 +22,4 @@ if (process.env.GITHUB_REPOSITORY || process.env.PAGES_BASE_URL) {
 } else {
     assert(!html.includes('href="hardcover://'), 'Unconfigured local build must not install another repository')
 }
-console.log('Verified three-source hosting artifacts.')
+console.log('Verified six-source hosting artifacts.')
