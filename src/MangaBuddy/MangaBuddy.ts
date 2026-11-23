@@ -3,9 +3,9 @@ import { CheerioAPI, load } from 'cheerio'
 import { HtmlReader, chapterNumber, imageURL } from '../HtmlReader'
 
 const DOMAIN = 'https://mangabuddy1.co.uk'
-const IMAGE_HOSTS = ['https://cdn1.love4awalk.xyz', DOMAIN]
+const IMAGE_HOSTS = ['https://cdn1.love4awalk.xyz', 'https://cdn4.sags2mobile.com', DOMAIN]
 export const MangaBuddyInfo: SourceInfo = {
-    version: '0.1.0', name: 'MangaBuddy', icon: 'icon.png', author: 'Hardcover Hub contributors',
+    version: '0.1.1', name: 'MangaBuddy', icon: 'icon.png', author: 'Hardcover Hub contributors',
     description: 'Experimental public-HTML MangaBuddy reader. Excludes marked adult catalog cards. Not affiliated with the website.',
     contentRating: ContentRating.MATURE, websiteBaseURL: DOMAIN,
     intents: SourceIntents.MANGA_CHAPTERS | SourceIntents.HOMEPAGE_SECTIONS

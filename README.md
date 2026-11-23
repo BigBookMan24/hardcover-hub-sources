@@ -88,3 +88,26 @@ redistributing this code. This repository is not affiliated with the source site
 GitHub setup reference: https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
 
 October 6 follow-up (0.1.1): serialize source requests, respect Retry-After cooldowns, and slow MangaHub’s request schedule to prevent request bursts. Toonily’s catalog rating is Mature. Kagane still requires successful in-app verification before reading can be confirmed.
+
+## November 23, 2026 troubleshooting update
+
+- MangaBuddy 0.1.1 adds the current `cdn4.sags2mobile.com` cover and reader
+  origin. The previous allowlist silently discarded every sampled search card.
+  A live Node runtime check returned 10 search cards, title details, 49 chapters,
+  and 38 reader page URLs for one sampled title. iPhone rendering still needs
+  confirmation after updating the extension.
+- Kagane 0.1.2 changes its website/API origin from the unresolvable `kagane.to`
+  to `kagane.moe`, linked by the official mirror directory at
+  <https://kagane.org/>. Existing series and chapter IDs are preserved. The
+  current site requires browser verification; its API and reader are not
+  certified working by this update. Media origins remain restricted to the
+  previously supported origins until a new reader manifest can be verified.
+- Atsu and MangaKatana passed sampled live search, details, chapters and reader
+  URL checks. MangaHub and Toonily returned browser-verification responses in
+  this environment. In Hardcover, open the affected source's website, complete
+  verification, select Use Session if offered, and retry. A successful website
+  visit alone does not confirm reader access.
+- The repository homepage and `versioning.json` were reachable. An Offline
+  extension label can reflect the individual website or adapter rather than a
+  failed repository deployment. MangaDex and MangaDemon are not maintained in
+  this repository.

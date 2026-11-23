@@ -141,7 +141,7 @@ kagane.requestManager.schedule = async req => {
         assert.equal(req.headers['x-integrity-token'], 'fixture-integrity')
         return response(reader)
     }
-    assert.equal(req.url, 'https://kagane.to/')
+    assert.equal(req.url, 'https://kagane.moe/')
     return response('<html>Session</html>')
 }
 const kaganeSearch = await kagane.getSearchResults({ title: 'example' })
